@@ -1,0 +1,246 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  EXAMINER
+  STUDENT
+  INVIGILATOR
+}
+
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum QuestionType {
+  MCQ
+  TRUE_FALSE
+  FILL_IN_BLANK
+}
+
+enum SessionStatus {
+  WAITING
+  IN_PROGRESS
+  SUBMITTED
+  TIMED_OUT
+  DISCONNECTED
+}
+
+enum FlagType {
+  TAB_SWITCH
+  PASTE_EVENT
+  WINDOW_BLUR
+  USB_DETECTED
+  MULTI_DEVICE
+  IP_ANOMALY
+  ANSWER_SIMILARITY
+  TIMING_ANOMALY
+}
+
+model Institution {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  shortName String?
+  logoUrl   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+  exams     Exam[]
+
+  @@map("institutions")
+}
+
+model User {
+  id             String    @id @default(uuid())
+  email          String    @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  role           Role
+  institutionId  String?
+  institution    Institution? @relation(fields: [institutionId], references: [id])
+  studentId      String?   @unique
+  program        String?
+  gender         String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  examSessions       ExamSession[]
+  behavioralFlags    BehavioralFlag[]
+  createdExams       Exam[]              @relation("ExamCreator")
+  invigilatorReports InvigilatorReport[] @relation("ReportAuthor")
+  invigilatedVenues  Venue[]             @relation("VenueInvigilator")
+
+  @@map("users")
+}
+
+model Exam {
+  id             String     @id @default(uuid())
+  title          String
+  description    String?
+  courseCode     String
+  courseName     String
+  status         ExamStatus @default(DRAFT)
+  durationMinutes Int
+  startTime      DateTime?
+  endTime        DateTime?
+  totalMarks     Int        @default(0)
+  passingMarks   Int        @default(0)
+  shuffleQuestions Boolean  @default(false)
+  allowBacktrack  Boolean   @default(true)
+  createdById    String
+  createdBy      User       @relation("ExamCreator", fields: [createdById], references: [id])
+  institutionId  String
+  institution    Institution @relation(fields: [institutionId], references: [id])
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  questions      Question[]
+  examSessions   ExamSession[]
+  venues         Venue[]
+  integrityPredictions IntegrityPrediction[]
+
+  @@map("exams")
+}
+
+model Question {
+  id           String       @id @default(uuid())
+  examId       String
+  exam         Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+  type         QuestionType
+  text         String
+  options      Json?
+  correctAnswer Json
+  marks        Int          @default(1)
+  order        Int          @default(0)
+  explanation  String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  answers      Answer[]
+
+  @@map("questions")
+}
+
+model Venue {
+  id             String   @id @default(uuid())
+  name           String
+  examId         String
+  exam           Exam     @relation(fields: [examId], references: [id])
+  capacity       Int
+  invigilatorId  String?
+  invigilator    User?    @relation("VenueInvigilator", fields: [invigilatorId], references: [id])
+  createdAt      DateTime @default(now())
+
+  seatingAssignments SeatingAssignment[]
+  invigilatorReports InvigilatorReport[]
+  integrityPredictions IntegrityPrediction[]
+
+  @@map("venues")
+}
+
+model SeatingAssignment {
+  id        String @id @default(uuid())
+  venueId   String
+  venue     Venue  @relation(fields: [venueId], references: [id])
+  sessionId String @unique
+  session   ExamSession @relation(fields: [sessionId], references: [id])
+  seatX     Float
+  seatY     Float
+  seatLabel String?
+
+  @@map("seating_assignments")
+}
+
+model ExamSession {
+  id              String        @id @default(uuid())
+  examId          String
+  exam            Exam          @relation(fields: [examId], references: [id])
+  studentId       String
+  student         User          @relation(fields: [studentId], references: [id])
+  status          SessionStatus @default(WAITING)
+  startedAt       DateTime?
+  submittedAt     DateTime?
+  ipAddress       String?
+  userAgent       String?
+  score           Int?
+  maxScore        Int?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  answers         Answer[]
+  behavioralFlags BehavioralFlag[]
+  seatingAssignment SeatingAssignment?
+
+  @@unique([examId, studentId])
+  @@map("exam_sessions")
+}
+
+model Answer {
+  id         String      @id @default(uuid())
+  sessionId  String
+  session    ExamSession @relation(fields: [sessionId], references: [id])
+  questionId String
+  question   Question    @relation(fields: [questionId], references: [id])
+  answer     Json?
+  isCorrect  Boolean?
+  score      Int?
+  answeredAt DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@unique([sessionId, questionId])
+  @@map("answers")
+}
+
+model BehavioralFlag {
+  id         String      @id @default(uuid())
+  sessionId  String
+  session    ExamSession @relation(fields: [sessionId], references: [id])
+  studentId  String
+  student    User        @relation(fields: [studentId], references: [id])
+  flagType   FlagType
+  metadata   Json?
+  createdAt  DateTime    @default(now())
+
+  @@map("behavioral_flags")
+}
+
+model IntegrityPrediction {
+  id          String   @id @default(uuid())
+  examId      String
+  exam        Exam     @relation(fields: [examId], references: [id])
+  venueId     String
+  venue       Venue    @relation(fields: [venueId], references: [id])
+  studentId   String
+  modelUsed   String
+  prediction  String
+  confidence  Float
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@map("integrity_predictions")
+}
+
+model InvigilatorReport {
+  id            String   @id @default(uuid())
+  venueId       String
+  venue         Venue    @relation(fields: [venueId], references: [id])
+  authorId      String
+  author        User     @relation("ReportAuthor", fields: [authorId], references: [id])
+  content       String
+  severity      String   @default("info")
+  createdAt     DateTime @default(now())
+
+  @@map("invigilator_reports")
+}
