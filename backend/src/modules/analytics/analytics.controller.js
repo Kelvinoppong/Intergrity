@@ -84,6 +84,71 @@ async function getGradeBoundaries(req, res, next) {
   }
 }
 
+async function getScaledScores(req, res, next) {
+  try {
+    const { examId } = req.params;
+    const method = req.query.method || "linear";
+    const targetMax = parseInt(req.query.targetMax, 10) || 100;
+    const targetMean = parseFloat(req.query.targetMean) || 65;
+    const targetStd = parseFloat(req.query.targetStd) || 15;
+
+    const sessions = await prisma.examSession.findMany({
+      where: { examId, status: "SUBMITTED" },
+      include: { student: { select: { id: true, firstName: true, lastName: true, studentId: true } } },
+    });
+
+    if (sessions.length === 0) {
+      return res.json({ success: true, data: { method, scaled: [] } });
+    }
+
+    const rawScores = sessions.map((s) => s.score || 0);
+    const maxPossible = sessions[0].maxScore || 1;
+    let scaled;
+
+    if (method === "linear") {
+      scaled = rawScores.map((s) => (s / maxPossible) * targetMax);
+    } else if (method === "minmax") {
+      const min = Math.min(...rawScores);
+      const max = Math.max(...rawScores);
+      const range = max - min || 1;
+      scaled = rawScores.map((s) => ((s - min) / range) * targetMax);
+    } else if (method === "zscore") {
+      const mean = rawScores.reduce((a, b) => a + b, 0) / rawScores.length;
+      const std = Math.sqrt(rawScores.map((s) => Math.pow(s - mean, 2)).reduce((a, b) => a + b, 0) / rawScores.length) || 1;
+      scaled = rawScores.map((s) => targetMean + targetStd * ((s - mean) / std));
+    } else if (method === "sqrt") {
+      scaled = rawScores.map((s) => Math.sqrt(s / maxPossible) * targetMax);
+    } else {
+      throw new AppError("Unknown scaling method. Use: linear, minmax, zscore, sqrt", 400);
+    }
+
+    const result = sessions.map((s, i) => ({
+      sessionId: s.id,
+      student: s.student,
+      rawScore: rawScores[i],
+      scaledScore: Math.round(Math.max(0, Math.min(targetMax, scaled[i])) * 100) / 100,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        method,
+        targetMax,
+        rawMax: maxPossible,
+        scaled: result,
+        summary: {
+          rawMean: rawScores.reduce((a, b) => a + b, 0) / rawScores.length,
+          scaledMean: scaled.reduce((a, b) => a + b, 0) / scaled.length,
+          scaledMin: Math.min(...scaled),
+          scaledMax: Math.max(...scaled),
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getCourseAnalytics(req, res, next) {
   try {
     const { institutionId } = req.params;
@@ -154,4 +219,4 @@ function groupByField(sessions, field) {
   return groups;
 }
 
-module.exports = { getExamStats, getGradeBoundaries, getCourseAnalytics };
+module.exports = { getExamStats, getGradeBoundaries, getCourseAnalytics, getScaledScores };

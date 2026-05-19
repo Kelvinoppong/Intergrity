@@ -1,65 +1,22 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { useAuthStore } from "@/store/authStore";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { PortalLayout } from "@/components/dashboard/PortalLayout";
+
+const Icon = ({ d }: { d: string }) => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d={d} />
+  </svg>
+);
 
 const NAV_ITEMS = [
-  { href: "/student", label: "Dashboard" },
-  { href: "/student/exam", label: "My Exams" },
+  { href: "/student", label: "Dashboard", icon: <Icon d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V10" /> },
+  { href: "/student/exam", label: "My Exams", icon: <Icon d="M9 12h6M9 16h6M9 8h6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" /> },
 ];
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const { user, isAuthenticated, logout, fetchProfile } = useAuthStore();
-
-  useEffect(() => {
-    if (!localStorage.getItem("accessToken")) {
-      router.push("/login");
-      return;
-    }
-    if (!isAuthenticated) fetchProfile();
-  }, [isAuthenticated, fetchProfile, router]);
-
-  useEffect(() => {
-    if (isAuthenticated && user && user.role !== "STUDENT") {
-      router.push("/");
-    }
-  }, [isAuthenticated, user, router]);
-
   return (
-    <div className="flex min-h-screen">
-      <aside className="w-64 border-r bg-card p-6">
-        <Link href="/student">
-          <h2 className="text-xl font-bold text-primary">INTEGRITY</h2>
-          <p className="text-xs text-muted-foreground">Student Portal</p>
-        </Link>
-        <nav className="mt-8 space-y-1">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "block rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent",
-                pathname === item.href ? "bg-accent text-accent-foreground" : "text-muted-foreground",
-              )}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="mt-auto pt-8">
-          <p className="text-sm text-muted-foreground">{user?.firstName} {user?.lastName}</p>
-          <Button variant="ghost" size="sm" onClick={() => { logout(); router.push("/login"); }} className="mt-2">
-            Sign Out
-          </Button>
-        </div>
-      </aside>
-      <main className="flex-1 p-8">{children}</main>
-    </div>
+    <PortalLayout portalName="Student Portal" navItems={NAV_ITEMS} allowedRoles={["STUDENT"]}>
+      {children}
+    </PortalLayout>
   );
 }

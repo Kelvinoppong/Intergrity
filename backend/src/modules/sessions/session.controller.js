@@ -106,8 +106,7 @@ async function submitExam(req, res, next) {
       if (!question) continue;
 
       maxScore += question.marks;
-      const isCorrect = JSON.stringify(question.correctAnswer) === JSON.stringify(ans.answer);
-      const score = isCorrect ? question.marks : 0;
+      const { isCorrect, score } = gradeAnswer(question, ans.answer);
       totalScore += score;
 
       answerRecords.push({
@@ -157,6 +156,27 @@ async function getSession(req, res, next) {
   }
 }
 
+async function getActiveSessions(req, res, next) {
+  try {
+    const where = { status: "IN_PROGRESS" };
+    if (req.query.examId) where.examId = req.query.examId;
+
+    const sessions = await prisma.examSession.findMany({
+      where,
+      include: {
+        student: { select: { id: true, firstName: true, lastName: true, studentId: true } },
+        exam: { select: { id: true, title: true, courseCode: true } },
+        seatingAssignment: { include: { venue: { select: { id: true, name: true } } } },
+      },
+      orderBy: { startedAt: "asc" },
+    });
+
+    res.json({ success: true, data: sessions });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function relocateStudent(req, res, next) {
   try {
     const { sessionId } = req.params;
@@ -184,4 +204,33 @@ async function relocateStudent(req, res, next) {
   }
 }
 
-module.exports = { startSession, autoSave, submitExam, getSession, relocateStudent };
+function gradeAnswer(question, studentAnswer) {
+  const { type, correctAnswer, marks } = question;
+
+  if (type === "MULTI_BLANK_EQUATION") {
+    if (!Array.isArray(correctAnswer) || !Array.isArray(studentAnswer)) {
+      return { isCorrect: false, score: 0 };
+    }
+    let correctCount = 0;
+    for (let i = 0; i < correctAnswer.length; i++) {
+      const expected = String(correctAnswer[i] ?? "").trim().toLowerCase();
+      const given = String(studentAnswer[i] ?? "").trim().toLowerCase();
+      if (expected === given) correctCount++;
+    }
+    const fraction = correctCount / correctAnswer.length;
+    const score = Math.round(marks * fraction);
+    return { isCorrect: fraction === 1, score };
+  }
+
+  if (type === "FILL_IN_BLANK") {
+    const expected = String(correctAnswer ?? "").trim().toLowerCase();
+    const given = String(studentAnswer ?? "").trim().toLowerCase();
+    const isCorrect = expected === given;
+    return { isCorrect, score: isCorrect ? marks : 0 };
+  }
+
+  const isCorrect = JSON.stringify(correctAnswer) === JSON.stringify(studentAnswer);
+  return { isCorrect, score: isCorrect ? marks : 0 };
+}
+
+module.exports = { startSession, autoSave, submitExam, getSession, getActiveSessions, relocateStudent };

@@ -183,6 +183,37 @@ export default function ExamTakingPage() {
                 placeholder="Type your answer..."
               />
             )}
+
+            {q.type === "MULTI_BLANK_EQUATION" && (() => {
+              const parts = q.text.split(/(___)/g);
+              const blankCount = parts.filter((p) => p === "___").length;
+              const current = Array.isArray(answers[q.id]) ? (answers[q.id] as string[]) : new Array(blankCount).fill("");
+              let blankIdx = 0;
+              return (
+                <div className="flex flex-wrap items-center gap-2 text-lg leading-loose">
+                  {parts.map((part, i) => {
+                    if (part === "___") {
+                      const idx = blankIdx++;
+                      return (
+                        <input
+                          key={i}
+                          type="text"
+                          className="inline-block h-9 w-32 rounded-md border-2 border-primary bg-background px-2 text-center text-base"
+                          value={current[idx] || ""}
+                          onChange={(e) => {
+                            const next = [...current];
+                            next[idx] = e.target.value;
+                            setAnswer(q.id, next);
+                          }}
+                          placeholder={`Blank ${idx + 1}`}
+                        />
+                      );
+                    }
+                    return <span key={i}>{part}</span>;
+                  })}
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       )}

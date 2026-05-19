@@ -56,6 +56,13 @@ async function login(req, res, next) {
       throw new AppError("Invalid credentials", 401);
     }
 
+    const currentIp = req.ip;
+    const currentUserAgent = req.get("user-agent") || "";
+
+    if (user.role === "STUDENT") {
+      await detectMultiDeviceLogin(user.id, currentIp, currentUserAgent);
+    }
+
     const tokenPayload = { id: user.id, email: user.email, role: user.role };
     const accessToken = signAccessToken(tokenPayload);
     const refreshToken = signRefreshToken(tokenPayload);
@@ -70,6 +77,44 @@ async function login(req, res, next) {
     });
   } catch (err) {
     next(err);
+  }
+}
+
+async function detectMultiDeviceLogin(studentId, currentIp, currentUserAgent) {
+  const activeSessions = await prisma.examSession.findMany({
+    where: { studentId, status: "IN_PROGRESS" },
+  });
+
+  for (const session of activeSessions) {
+    const ipMismatch = session.ipAddress && session.ipAddress !== currentIp;
+    const uaMismatch = session.userAgent && session.userAgent !== currentUserAgent;
+
+    if (ipMismatch || uaMismatch) {
+      await prisma.behavioralFlag.create({
+        data: {
+          sessionId: session.id,
+          studentId,
+          flagType: "MULTI_DEVICE",
+          metadata: {
+            originalIp: session.ipAddress,
+            newIp: currentIp,
+            originalUserAgent: session.userAgent,
+            newUserAgent: currentUserAgent,
+            detectedAt: new Date().toISOString(),
+          },
+        },
+      });
+
+      try {
+        const { getIO } = require("../../socket");
+        getIO().to(`exam:${session.examId}`).emit("flag:new", {
+          sessionId: session.id,
+          studentId,
+          flagType: "MULTI_DEVICE",
+          createdAt: new Date(),
+        });
+      } catch {}
+    }
   }
 }
 
@@ -100,7 +145,8 @@ async function getProfile(req, res, next) {
       where: { id: req.user.id },
       select: {
         id: true, email: true, firstName: true, lastName: true, role: true,
-        studentId: true, program: true, gender: true, institution: true, createdAt: true,
+        studentId: true, program: true, gender: true,
+        institutionId: true, institution: true, createdAt: true,
       },
     });
     if (!user) throw new AppError("User not found", 404);

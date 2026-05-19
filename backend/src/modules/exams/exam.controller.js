@@ -1,6 +1,27 @@
 const prisma = require("../../config/db");
 const { AppError } = require("../../middleware/errorHandler");
 
+async function resolveInstitutionId(userId, explicitId) {
+  if (explicitId) return explicitId;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { institutionId: true },
+  });
+  if (user?.institutionId) return user.institutionId;
+
+  const defaultInst = await prisma.institution.upsert({
+    where: { name: "Default Institution" },
+    create: { name: "Default Institution", shortName: "DEFAULT" },
+    update: {},
+  });
+  await prisma.user.update({
+    where: { id: userId },
+    data: { institutionId: defaultInst.id },
+  });
+  return defaultInst.id;
+}
+
 async function createExam(req, res, next) {
   try {
     const {
@@ -8,6 +29,8 @@ async function createExam(req, res, next) {
       startTime, endTime, totalMarks, passingMarks, shuffleQuestions,
       allowBacktrack, institutionId,
     } = req.body;
+
+    const resolvedInstId = await resolveInstitutionId(req.user.id, institutionId);
 
     const exam = await prisma.exam.create({
       data: {
@@ -19,7 +42,7 @@ async function createExam(req, res, next) {
         shuffleQuestions: shuffleQuestions || false,
         allowBacktrack: allowBacktrack !== false,
         createdById: req.user.id,
-        institutionId,
+        institutionId: resolvedInstId,
       },
     });
 

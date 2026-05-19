@@ -101,11 +101,19 @@ export default function ExamsPage() {
 
 function QuestionBuilder({ examId, onClose }: { examId: string; onClose: () => void }) {
   const { addQuestion } = useExamStore();
-  const [qForm, setQForm] = useState<{ type: QuestionType; text: string; options: string[]; correctAnswer: string; marks: number }>({
+  const [qForm, setQForm] = useState<{
+    type: QuestionType;
+    text: string;
+    options: string[];
+    correctAnswer: string;
+    blanks: string[];
+    marks: number;
+  }>({
     type: "MCQ",
     text: "",
     options: ["", "", "", ""],
     correctAnswer: "",
+    blanks: ["", ""],
     marks: 1,
   });
 
@@ -115,13 +123,17 @@ function QuestionBuilder({ examId, onClose }: { examId: string; onClose: () => v
       type: qForm.type,
       text: qForm.text,
       marks: qForm.marks,
-      correctAnswer: qForm.type === "MCQ" ? qForm.correctAnswer : qForm.type === "TRUE_FALSE" ? qForm.correctAnswer : qForm.correctAnswer,
     };
     if (qForm.type === "MCQ") {
       payload.options = qForm.options.filter(Boolean);
+      payload.correctAnswer = qForm.correctAnswer;
+    } else if (qForm.type === "MULTI_BLANK_EQUATION") {
+      payload.correctAnswer = qForm.blanks.filter((b) => b !== "");
+    } else {
+      payload.correctAnswer = qForm.correctAnswer;
     }
     await addQuestion(examId, payload);
-    setQForm({ type: "MCQ", text: "", options: ["", "", "", ""], correctAnswer: "", marks: 1 });
+    setQForm({ type: "MCQ", text: "", options: ["", "", "", ""], correctAnswer: "", blanks: ["", ""], marks: 1 });
   }
 
   return (
@@ -143,6 +155,7 @@ function QuestionBuilder({ examId, onClose }: { examId: string; onClose: () => v
                 <option value="MCQ">Multiple Choice</option>
                 <option value="TRUE_FALSE">True / False</option>
                 <option value="FILL_IN_BLANK">Fill in the Blank</option>
+                <option value="MULTI_BLANK_EQUATION">Multi-Blank Equation</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -152,7 +165,7 @@ function QuestionBuilder({ examId, onClose }: { examId: string; onClose: () => v
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Question Text</label>
+            <label className="text-sm font-medium">Question Text {qForm.type === "MULTI_BLANK_EQUATION" && <span className="text-xs text-muted-foreground">(use ___ for each blank, e.g. "x + ___ = ___")</span>}</label>
             <textarea
               className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={qForm.text}
@@ -179,6 +192,34 @@ function QuestionBuilder({ examId, onClose }: { examId: string; onClose: () => v
             </div>
           )}
 
+          {qForm.type === "MULTI_BLANK_EQUATION" && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Blank Answers (in order)</label>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setQForm({ ...qForm, blanks: [...qForm.blanks, ""] })}>+ Blank</Button>
+                  {qForm.blanks.length > 1 && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setQForm({ ...qForm, blanks: qForm.blanks.slice(0, -1) })}>- Blank</Button>
+                  )}
+                </div>
+              </div>
+              {qForm.blanks.map((b, i) => (
+                <Input
+                  key={i}
+                  placeholder={`Blank ${i + 1} answer`}
+                  value={b}
+                  onChange={(e) => {
+                    const blanks = [...qForm.blanks];
+                    blanks[i] = e.target.value;
+                    setQForm({ ...qForm, blanks });
+                  }}
+                  required
+                />
+              ))}
+            </div>
+          )}
+
+          {qForm.type !== "MULTI_BLANK_EQUATION" && (
           <div className="space-y-2">
             <label className="text-sm font-medium">Correct Answer</label>
             {qForm.type === "TRUE_FALSE" ? (
@@ -195,6 +236,7 @@ function QuestionBuilder({ examId, onClose }: { examId: string; onClose: () => v
               <Input value={qForm.correctAnswer} onChange={(e) => setQForm({ ...qForm, correctAnswer: e.target.value })} required />
             )}
           </div>
+          )}
 
           <Button type="submit">Add Question</Button>
         </form>

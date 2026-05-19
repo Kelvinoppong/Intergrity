@@ -20,7 +20,7 @@ export interface Institution {
 }
 
 export type ExamStatus = "DRAFT" | "PUBLISHED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
-export type QuestionType = "MCQ" | "TRUE_FALSE" | "FILL_IN_BLANK";
+export type QuestionType = "MCQ" | "TRUE_FALSE" | "FILL_IN_BLANK" | "MULTI_BLANK_EQUATION";
 
 export interface Exam {
   id: string;

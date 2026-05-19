@@ -10,6 +10,7 @@ router.use(authenticate);
 router.post("/start", authorize("STUDENT"), ctrl.startSession);
 router.post("/:sessionId/autosave", authorize("STUDENT"), ctrl.autoSave);
 router.post("/:sessionId/submit", authorize("STUDENT"), ctrl.submitExam);
+router.get("/active", authorize("INVIGILATOR", "EXAMINER", "ADMIN"), ctrl.getActiveSessions);
 router.get("/:sessionId", ctrl.getSession);
 router.patch("/:sessionId/relocate", authorize("INVIGILATOR", "ADMIN"), ctrl.relocateStudent);
 

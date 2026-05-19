@@ -26,6 +26,7 @@ enum QuestionType {
   MCQ
   TRUE_FALSE
   FILL_IN_BLANK
+  MULTI_BLANK_EQUATION
 }
 
 enum SessionStatus {
@@ -48,14 +49,19 @@ enum FlagType {
 }
 
 model Institution {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  shortName String?
-  logoUrl   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  users     User[]
-  exams     Exam[]
+  id           String   @id @default(uuid())
+  name         String   @unique
+  shortName    String?
+  logoUrl      String?
+  primaryColor String?
+  accentColor  String?
+  motto        String?
+  website      String?
+  contactEmail String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  users        User[]
+  exams        Exam[]
 
   @@map("institutions")
 }

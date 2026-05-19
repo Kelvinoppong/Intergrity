@@ -1,12 +1,32 @@
+const path = require("path");
+const fs = require("fs");
 const prisma = require("../../config/db");
 const { AppError } = require("../../middleware/errorHandler");
 
+const BRANDING_FIELDS = [
+  "name",
+  "shortName",
+  "logoUrl",
+  "primaryColor",
+  "accentColor",
+  "motto",
+  "website",
+  "contactEmail",
+];
+
+function pickBrandingFields(body) {
+  const data = {};
+  for (const f of BRANDING_FIELDS) {
+    if (body[f] !== undefined) data[f] = body[f];
+  }
+  return data;
+}
+
 async function createInstitution(req, res, next) {
   try {
-    const { name, shortName, logoUrl } = req.body;
-    const institution = await prisma.institution.create({
-      data: { name, shortName, logoUrl },
-    });
+    const data = pickBrandingFields(req.body);
+    if (!data.name) throw new AppError("Name is required", 400);
+    const institution = await prisma.institution.create({ data });
     res.status(201).json({ success: true, data: institution });
   } catch (err) {
     if (err.code === "P2002") {
@@ -40,12 +60,25 @@ async function getInstitution(req, res, next) {
   }
 }
 
+async function getMyInstitution(req, res, next) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { institution: true },
+    });
+    if (!user?.institution) throw new AppError("No institution linked to your account", 404);
+    res.json({ success: true, data: user.institution });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function updateInstitution(req, res, next) {
   try {
-    const { name, shortName, logoUrl } = req.body;
+    const data = pickBrandingFields(req.body);
     const inst = await prisma.institution.update({
       where: { id: req.params.id },
-      data: { name, shortName, logoUrl },
+      data,
     });
     res.json({ success: true, data: inst });
   } catch (err) {
@@ -53,4 +86,29 @@ async function updateInstitution(req, res, next) {
   }
 }
 
-module.exports = { createInstitution, getInstitutions, getInstitution, updateInstitution };
+async function uploadLogo(req, res, next) {
+  try {
+    if (!req.file) throw new AppError("No file uploaded", 400);
+    const publicUrl = `/uploads/logos/${req.file.filename}`;
+    const inst = await prisma.institution.update({
+      where: { id: req.params.id },
+      data: { logoUrl: publicUrl },
+    });
+    res.json({ success: true, data: inst });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const uploadsDir = path.join(__dirname, "..", "..", "..", "uploads", "logos");
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+module.exports = {
+  createInstitution,
+  getInstitutions,
+  getInstitution,
+  getMyInstitution,
+  updateInstitution,
+  uploadLogo,
+  uploadsDir,
+};
